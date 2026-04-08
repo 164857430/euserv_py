@@ -40,7 +40,7 @@
 | `EMAIL_PASS` | **是** | 邮箱应用专用密码（需开启 IMAP）。多账号配置 `EMAIL_PASS2` 等。 |
 | `TG_BOT_TOKEN` | 否 | Telegram Bot Token。 |
 | `TG_CHAT_ID` | 否 | Telegram 用户 ID。 |
-| `BARK_URL` | 否 | iOS Bark 推送地址。 |
+| `BARK_URL` | 否 | iOS Bark 推送地址。例如：`https://api.day.app/your_key/` |
 
 ---
 
