@@ -637,129 +637,166 @@ class EUserv:
 
 
     def update_info(self):
-        # 支持通过环境变量 UPDATE_INFO_DAYS 自定义触发日（逗号分隔），默认 2,22
-        _days_str = os.getenv("UPDATE_INFO_DAYS", "2,22")
-        try:
-            _update_days = {int(d.strip()) for d in _days_str.split(',') if d.strip().isdigit()}
-        except Exception:
-            _update_days = {2, 22}
-        current_day = datetime.now().day
-        if current_day not in _update_days:
-            return
+            # 支持通过环境变量 UPDATE_INFO_DAYS 自定义触发日（逗号分隔），默认 2,22
+            _days_str = os.getenv("UPDATE_INFO_DAYS", "2,22")
+            try:
+                _update_days = {int(d.strip()) for d in _days_str.split(',') if d.strip().isdigit()}
+            except Exception:
+                _update_days = {2, 22}
+            if not _update_days:
+                _update_days = {2, 22}
 
-        logger.info(f"更新用户信息...")
-        try:
-            # 更新用户信息，euserv每隔一段时间就需要用户更新信息，每个月 UPDATE_INFO_DAYS 指定的日期触发
-            #1.进入用户界面
-            url = f"https://support.euserv.com/index.iphp?sess_id={self.sess_id}&action=show_customerdata"
-            showinfo_data = {
-                'sess_id': self.sess_id,
-                'action': 'show_customerdata'
-            }
-            headers = {'user-agent': USER_AGENT,
-                       'host': 'support.euserv.com',
-                       'referer': f'https://support.euserv.com/index.iphp?sess_id={self.sess_id}&subaction=show_kwk_main'
-                       }
-            
-            logger.info(f"进入用户界面...")
-            response = self.session.get(url=url, headers=headers)
-            response.raise_for_status()
+            current_day = datetime.now().day
+            if current_day not in _update_days:
+                return
 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            logger.info("更新用户信息...")
+            try:
+                # 1. 进入用户信息界面
+                url = f"https://support.euserv.com/index.iphp?sess_id={self.sess_id}&action=show_customerdata"
+                headers = {
+                    'user-agent': USER_AGENT,
+                    'host': 'support.euserv.com',
+                    'referer': f'https://support.euserv.com/index.iphp?sess_id={self.sess_id}&subaction=show_kwk_main'
+                }
 
-            if not self.c_id:
-                self.c_id = soup.find("input", {"name": "c_id"})["value"]
-            c_att = soup.select_one('#c_att option[selected]').get('value')
-            c_street = soup.find('input', {'name': 'c_street'})['value']
-            c_streetno = soup.find('input', {'name': 'c_streetno'})['value']
-            c_postal = soup.find('input', {'name': 'c_postal'})['value']
-            c_city = soup.find('input', {'name': 'c_city'})['value']
-            c_country = soup.select_one('#c_country option[selected]').get('value')
-            c_phone_country_prefix = soup.find('input', {'name': 'c_phone_country_prefix'})['value']      
-            c_phone_password = soup.find('input', {'name': 'c_phone_password'})['value'] 
-            c_fax_country_prefix = soup.find('input', {'name': 'c_fax_country_prefix'})['value'] 
-            c_tac_date = soup.find('input', {'name': 'c_tac_date'})['value'] 
-            c_website = soup.find('input', {'name': 'c_website'})['value'] 
-            c_firstcontact = soup.select_one('#c_firstcontact option[selected]').get('value')
-            c_emailabo_contract = soup.find('input', {'name': 'c_emailabo_contract'})['value'] 
-            c_emailabo_products = soup.find('input', {'name': 'c_emailabo_products'})['value'] 
-            c_forumnick = soup.find('input', {'name': 'c_forumnick'})['value'] 
-            c_hrno = soup.find('input', {'name': 'c_hrno'})['value'] 
-            c_hrcourt = soup.find('input', {'name': 'c_hrcourt'})['value'] 
-            c_taxid = soup.find('input', {'name': 'c_taxid'})['value'] 
-            c_identifier = soup.find('input', {'name': 'c_identifier'})['value'] 
-            c_birthplace = soup.find('input', {'name': 'c_birthplace'})['value'] 
-            c_country_of_birth = soup.select_one('#c_country_of_birth option[selected]').get('value')
+                logger.info("进入用户界面...")
+                response = self.session.get(url=url, headers=headers)
+                response.raise_for_status()
 
-            c_birthdays = soup.find_all('input', {'name': 'c_birthday[]'})
-            c_birthday_value = []
-            for c_birthday in c_birthdays:
-                if c_birthday:
-                    c_birthday_value.append(c_birthday['value'].strip())
+                soup = BeautifulSoup(response.text, 'html.parser')
+
+                # ── 工具函数 ────────────────────────────────────────────────
+                def _val(name):
+                    """读取 text/hidden input 的 value，找不到返回空串。"""
+                    tag = soup.find('input', {'name': name})
+                    return tag.get('value', '').strip() if tag else ''
+
+                def _sel(selector):
+                    """读取 select 中选中 option 的 value，找不到返回空串。"""
+                    opt = soup.select_one(f'{selector} option[selected]')
+                    return opt.get('value', '') if opt else ''
+
+                def _checkbox(name):
+                    """
+                    checkbox：已勾选返回 value（通常为 '1'），未勾选返回 None。
+                    None 表示该字段不应出现在 POST body 里（与浏览器行为一致）。
+                    """
+                    tag = soup.find('input', {'name': name, 'type': 'checkbox'})
+                    if tag and tag.get('checked') is not None:
+                        return tag.get('value', '1')
+                    return None
+
+                def _vals(name):
+                    """读取同名 input 列表（c_birthday[]、c_phone[]、c_fax[]）。"""
+                    return [t.get('value', '').strip() for t in soup.find_all('input', {'name': name})]
+
+                # ── 提取 c_id ────────────────────────────────────────────────
+                if not self.c_id:
+                    self.c_id = _val('c_id')
+
+                # ── 修复🔴：新增 c_fname / c_lname ────────────────────────────
+                c_fname = _val('c_fname')
+                c_lname = _val('c_lname')
+
+                # ── 修复🟡：动态读取 c_ustid[]（text + select 各一个）─────────
+                c_ustid_text = [t.get('value', '') for t in soup.find_all('input', {'name': 'c_ustid[]'})]
+                c_ustid_sel  = [
+                    (s.find('option', selected=True) or {}).get('value', '')
+                    for s in soup.find_all('select', {'name': 'c_ustid[]'})
+                ]
+                c_ustid_value = c_ustid_text + c_ustid_sel  # 保持与表单顺序一致
+
+                # ── 修复🟢：c_org 动态读取，不再硬编码为空 ────────────────────
+                c_org = _val('c_org')
+
+                # ── 普通字段 ─────────────────────────────────────────────────
+                c_att                  = _sel('#c_att')
+                c_street               = _val('c_street')
+                c_streetno             = _val('c_streetno')
+                c_postal               = _val('c_postal')
+                c_city                 = _val('c_city')
+                c_country              = _sel('#c_country')
+                c_phone_country_prefix = _val('c_phone_country_prefix')
+                c_phone_password       = _val('c_phone_password')
+                c_fax_country_prefix   = _val('c_fax_country_prefix')
+                c_website              = _val('c_website')
+                c_firstcontact         = _sel('#c_firstcontact')
+                c_forumnick            = _val('c_forumnick')
+                c_hrno                 = _val('c_hrno')
+                c_hrcourt              = _val('c_hrcourt')
+                c_taxid                = _val('c_taxid')
+                c_identifier           = _val('c_identifier')
+                c_birthplace           = _val('c_birthplace')
+                c_country_of_birth     = _sel('#c_country_of_birth')
+
+                # ── 修复🟢：列表字段用列表推导，避免无效的 Tag truthy 判断 ────
+                c_birthday_value = _vals('c_birthday[]')
+                c_phone_value    = _vals('c_phone[]')
+                c_fax_value      = _vals('c_fax[]')
+
+                # ── 修复🔴：checkbox 按浏览器语义处理 ────────────────────────
+                c_tac_date          = _checkbox('c_tac_date')
+                c_emailabo_contract = _checkbox('c_emailabo_contract')
+                c_emailabo_products = _checkbox('c_emailabo_products')
+
+                # ── 构造 POST body ────────────────────────────────────────────
+                upInfo_data = {
+                    'sess_id':               self.sess_id,
+                    'subaction':             'kc2_customer_data_update',
+                    'c_id':                  self.c_id,
+                    'c_fname':               c_fname,           # 🔴 新增
+                    'c_lname':               c_lname,           # 🔴 新增
+                    'c_org':                 c_org,             # 🟢 动态
+                    'c_ustid[]':             c_ustid_value,     # 🟡 动态
+                    'c_att':                 c_att,
+                    'c_street':              c_street,
+                    'c_streetno':            c_streetno,
+                    'c_postal':              c_postal,
+                    'c_city':                c_city,
+                    'c_country':             c_country,
+                    'c_birthday[]':          c_birthday_value,
+                    'c_phone_country_prefix': c_phone_country_prefix,
+                    'c_phone[]':             c_phone_value,
+                    'c_phone_password':      c_phone_password,
+                    'c_fax_country_prefix':  c_fax_country_prefix,
+                    'c_fax[]':               c_fax_value,
+                    'c_website':             c_website,
+                    'c_firstcontact':        c_firstcontact,
+                    'c_forumnick':           c_forumnick,
+                    'c_hrno':                c_hrno,
+                    'c_hrcourt':             c_hrcourt,
+                    'c_taxid':               c_taxid,
+                    'c_identifier':          c_identifier,
+                    'c_birthplace':          c_birthplace,
+                    'c_country_of_birth':    c_country_of_birth,
+                }
+
+                # 🔴 checkbox 未勾选时不传（与浏览器行为一致）
+                if c_tac_date is not None:
+                    upInfo_data['c_tac_date'] = c_tac_date
+                if c_emailabo_contract is not None:
+                    upInfo_data['c_emailabo_contract'] = c_emailabo_contract
+                if c_emailabo_products is not None:
+                    upInfo_data['c_emailabo_products'] = c_emailabo_products
+
+                # ── 提交 ─────────────────────────────────────────────────────
+                logger.info("提交保存用户信息...")
+                response = self.session.post(
+                    url='https://support.euserv.com/index.iphp',
+                    headers=headers,
+                    data=upInfo_data
+                )
+                response.raise_for_status()
+
+                if 'customer data has been changed' in response.text:
+                    logger.info("✅ 保存用户信息成功")
                 else:
-                    c_birthday_value.append('')
+                    logger.warning(f"⚠️ 保存用户信息失败，response={response.text[:500]}")
 
-            c_phones = soup.find_all('input', {'name': 'c_phone[]'})
-            c_phone_value = []
-            for c_phone in c_phones:
-                if c_phone:
-                    c_phone_value.append(c_phone['value'].strip())
-                else:
-                    c_phone_value.append('')
-
-            c_faxs = soup.find_all('input', {'name': 'c_fax[]'})
-            c_fax_value = []
-            for c_fax in c_faxs:
-                if c_fax:
-                    c_fax_value.append(c_fax['value'].strip())
-                else:
-                    c_fax_value.append('')     
-
-            upInfo_data = {
-                'sess_id': self.sess_id,
-                'subaction': 'kc2_customer_data_update',
-                'c_id': self.c_id,
-                'c_org': '',
-                'c_ustid[]': ['', ''],
-                'c_att': c_att,
-                'c_street': c_street,
-                'c_streetno': c_streetno,
-                'c_postal': c_postal,
-                'c_city': c_city,
-                'c_country': c_country,
-                'c_birthday[]': c_birthday_value,
-                'c_phone_country_prefix': c_phone_country_prefix,
-                'c_phone[]': c_phone_value,
-                'c_phone_password': c_phone_password,
-                'c_fax_country_prefix': c_fax_country_prefix,
-                'c_fax[]': c_fax_value,
-                'c_tac_date': c_tac_date,
-                'c_website': c_website,
-                'c_firstcontact': c_firstcontact,
-                'c_emailabo_contract': c_emailabo_contract,
-                'c_emailabo_products': c_emailabo_products,
-                'c_forumnick': c_forumnick,
-                'c_hrno': c_hrno,
-                'c_hrcourt': c_hrcourt,
-                'c_taxid': c_taxid,
-                'c_identifier': c_identifier,
-                'c_birthplace': c_birthplace,
-                'c_country_of_birth': c_country_of_birth
-            }
-
-            url = f"https://support.euserv.com/index.iphp"
-            logger.info(f"提交保存用户信息...")
-            response = self.session.post(url=url, headers=headers, data=upInfo_data)
-            response.raise_for_status()
-
-            if 'customer data has been changed' in response.text:
-                logger.info(f"保存用户信息成功")
-            else:
-                logger.info(f"保存用户信息失败，接口返回response={response.text}")
-
-        except Exception as e:
-            logger.error(f"❌ 更新用户信息异常: {e}", exc_info=True)
-            return False
+            except Exception as e:
+                logger.error(f"❌ 更新用户信息异常: {e}", exc_info=True)
+                return False
 
 
     def get_servers(self) -> Dict[str, Tuple[bool, str]]:
