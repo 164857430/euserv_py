@@ -811,17 +811,24 @@ class EUserv:
         headers = {'user-agent': USER_AGENT, 'origin': 'https://www.euserv.com'}
         
         try:
-            detail_response = self.session.get(url=url, headers=headers)
-            detail_response.raise_for_status()
+            # ================= 终极修复：带重试机制的智能抓取 =================
+            max_retries = 3  # 最大尝试次数，设置为3次
+            soup = None
             
-            # 用 logger.info 强制输出，专治 GitHub 吞日志
-            logger.info("================ 网页源码开始 ================")
-            logger.info("\n" + detail_response.text[:3000])
-            logger.info("================ 网页源码结束 ================")
-            # --------------------------------------------------------
-
-            soup = BeautifulSoup(detail_response.text, 'html.parser')
-            soup = BeautifulSoup(detail_response.text, 'html.parser')
+            for attempt in range(max_retries):
+                logger.info(f"尝试获取服务器页面 (第 {attempt + 1}/{max_retries} 次)...")
+                detail_response = self.session.get(url=url, headers=headers)
+                detail_response.raise_for_status()
+                soup = BeautifulSoup(detail_response.text, 'html.parser')
+                
+                # 判断页面里有没有服务器的特征代码（那个特定的 CSS 类名）
+                if soup.select('.td-z1-sp1-kc'):
+                    logger.info("✅ 成功穿透弹窗，页面已完全加载！")
+                    break  # 找到了就立刻跳出循环，不再重复请求
+                else:
+                    logger.warning(f"⚠️ 页面似乎被过渡弹窗拦截，等待 3 秒后重试...")
+                    time.sleep(3)  # 等待3秒，模拟人类看弹窗的时间
+            # ==================================================================
             servers = {}
 
             # 修复1: 动态匹配所有 Tab，不硬编码 ID
