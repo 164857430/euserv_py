@@ -814,10 +814,12 @@ class EUserv:
             detail_response = self.session.get(url=url, headers=headers)
             detail_response.raise_for_status()
             
-            # --- 增加这两行调试代码 ---
-            with open("debug_server_page.html", "w", encoding="utf-8") as f:
-                f.write(detail_response.text)
-            # --------------------------
+            # --- 改成直接打印出来，这样在 GitHub Actions 日志里就能看到 ---
+            print("================ 网页源码开始 ================")
+            # 打印前 2000 个字符就足够看出是被拦截还是网页改版了
+            print(detail_response.text[:2000]) 
+            print("================ 网页源码结束 ================")
+            # --------------------------------------------------------
 
             soup = BeautifulSoup(detail_response.text, 'html.parser')
             soup = BeautifulSoup(detail_response.text, 'html.parser')
