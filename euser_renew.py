@@ -813,7 +813,13 @@ class EUserv:
         try:
             detail_response = self.session.get(url=url, headers=headers)
             detail_response.raise_for_status()
+            
+            # --- 增加这两行调试代码 ---
+            with open("debug_server_page.html", "w", encoding="utf-8") as f:
+                f.write(detail_response.text)
+            # --------------------------
 
+            soup = BeautifulSoup(detail_response.text, 'html.parser')
             soup = BeautifulSoup(detail_response.text, 'html.parser')
             servers = {}
 
