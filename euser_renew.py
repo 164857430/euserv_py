@@ -588,7 +588,10 @@ class EUserv:
             if 'PIN that you receive via email' in response.text:
                 self.c_id = soup.find("input", {"name": "c_id"})["value"]
                 logger.info("⚠️ 需要 PIN 验证（首次登录或 Cookie 已失效）")
-                time.sleep(3)
+                # ==== 修改这里 ====
+                logger.info("⏳ 正在等待 EUserv 发送邮件，稍等 20 秒...")
+                time.sleep(20)  # 把原来的 3 改成 20
+                # =================
 
                 pin = get_euserv_pin(
                     self.config.email_pin,
@@ -811,31 +814,11 @@ class EUserv:
         headers = {'user-agent': USER_AGENT, 'origin': 'https://www.euserv.com'}
         
         try:
-            # ================= 终极修复：带重试机制的智能抓取 =================
-            max_retries = 3  # 最大尝试次数
-            soup = None
-            
-            for attempt in range(max_retries):
-                logger.info(f"尝试获取服务器页面 (第 {attempt + 1}/{max_retries} 次)...")
-                detail_response = self.session.get(url=url, headers=headers)
-                detail_response.raise_for_status()
-                soup = BeautifulSoup(detail_response.text, 'html.parser')
-                
-                # 判断页面里有没有服务器的特征代码
-                if soup.select('.td-z1-sp1-kc'):
-                    logger.info("✅ 成功穿透弹窗，页面已完全加载！")
-                    break  # 找到了就立刻跳出循环
-                else:
-                    logger.warning(f"⚠️ 页面似乎被过渡弹窗拦截，等待 3 秒后重试...")
-                    
-                    # 🔴 关键改动在这里：如果尝试了 3 次还是失败，打印出案发现场的网页源码！
-                    if attempt == max_retries - 1:
-                        logger.error("================ 案发现场网页源码开始 ================")
-                        logger.error("\n" + detail_response.text[:3000]) # 打印前3000个字符
-                        logger.error("================ 案发现场网页源码结束 ================")
-                        
-                    time.sleep(3)  # 等待3秒
-            # ==================================================================
+            # ================= 恢复最清爽的单次请求 =================
+            detail_response = self.session.get(url=url, headers=headers)
+            detail_response.raise_for_status()
+            soup = BeautifulSoup(detail_response.text, 'html.parser')
+            # ========================================================
             servers = {}
 
             # 修复1: 动态匹配所有 Tab，不硬编码 ID
@@ -921,7 +904,10 @@ class EUserv:
             
             # 步骤3: 获取 PIN
             logger.debug("步骤3: 等待并获取 PIN 码...")
-            time.sleep(8)
+            # ==== 修改这里 ====
+            logger.info("⏳ 正在等待续期 PIN 码邮件，稍等 20 秒...")
+            time.sleep(20)  # 把原来的 8 改成 20
+            # =================
             pin = get_euserv_pin(
                 self.config.email_pin,
                 self.config.email_password,
