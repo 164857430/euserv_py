@@ -812,7 +812,7 @@ class EUserv:
         
         try:
             # ================= 终极修复：带重试机制的智能抓取 =================
-            max_retries = 3  # 最大尝试次数，设置为3次
+           max_retries = 3  # 最大尝试次数
             soup = None
             
             for attempt in range(max_retries):
@@ -821,13 +821,20 @@ class EUserv:
                 detail_response.raise_for_status()
                 soup = BeautifulSoup(detail_response.text, 'html.parser')
                 
-                # 判断页面里有没有服务器的特征代码（那个特定的 CSS 类名）
+                # 判断页面里有没有服务器的特征代码
                 if soup.select('.td-z1-sp1-kc'):
                     logger.info("✅ 成功穿透弹窗，页面已完全加载！")
-                    break  # 找到了就立刻跳出循环，不再重复请求
+                    break  # 找到了就立刻跳出循环
                 else:
                     logger.warning(f"⚠️ 页面似乎被过渡弹窗拦截，等待 3 秒后重试...")
-                    time.sleep(3)  # 等待3秒，模拟人类看弹窗的时间
+                    
+                    # 🔴 关键改动在这里：如果尝试了 3 次还是失败，打印出案发现场的网页源码！
+                    if attempt == max_retries - 1:
+                        logger.error("================ 案发现场网页源码开始 ================")
+                        logger.error("\n" + detail_response.text[:3000]) # 打印前3000个字符
+                        logger.error("================ 案发现场网页源码结束 ================")
+                        
+                    time.sleep(3)  # 等待3秒
             # ==================================================================
             servers = {}
 
