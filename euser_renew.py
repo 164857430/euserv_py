@@ -812,7 +812,7 @@ class EUserv:
         
         try:
             # ================= 终极修复：带重试机制的智能抓取 =================
-           max_retries = 3  # 最大尝试次数
+            max_retries = 3  # 最大尝试次数
             soup = None
             
             for attempt in range(max_retries):
