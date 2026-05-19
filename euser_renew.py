@@ -806,6 +806,8 @@ class EUserv:
         """获取服务器列表"""
         logger.info(f"正在获取账号 {self.config.email} 的服务器列表...")
         
+            return servers
+        
         if not self.sess_id:
             logger.error("❌ 未登录")
             return {}
@@ -855,6 +857,18 @@ class EUserv:
                     servers[server_id_text] = (can_renew, can_renew_date)
             
             logger.info(f"✅ 账号 {self.config.email} 找到 {len(servers)} 台服务器")
+            
+            # ================= ⚡ 新增：平时未到期时，记录下一次续期日子 ⚡ =================
+            for order_id, (can_renew, can_renew_date) in servers.items():
+                if can_renew_date and not can_renew:  # 只有在当前“不需要续期”时才记录
+                    try:
+                        with open("next_renew_date.txt", "w", encoding="utf-8") as f:
+                            f.write(can_renew_date)
+                        logger.info(f"💾 已将下次开放续期日期 {can_renew_date} 写入缓存文件")
+                    except Exception as e:
+                        logger.warning(f"写入日期缓存失败: {e}")
+            # ============================================================================
+            
             return servers
             
         except Exception as e:
@@ -977,6 +991,14 @@ class EUserv:
                 # 续期成功特征：服务器不再处于"可续期"状态
                 if not can_renew_after:
                     logger.info(f"✅ 服务器 {order_id} 续期验证通过（新可续期日期: {new_date}）")
+                    # ================= ⚡ 新增：续期成功后，把下个月的新日子写进去 ⚡ =================
+                    try:
+                        with open("next_renew_date.txt", "w", encoding="utf-8") as f:
+                            f.write(new_date)
+                        logger.info(f"💾 续期成功！已更新下个月开放续期日期 {new_date} 到缓存文件")
+                    except Exception as e:
+                        logger.warning(f"续期成功后写入新日期缓存失败: {e}")
+                    # =============================================================================
                     return True
                 else:
                     logger.warning(f"⚠️ 服务器 {order_id} 续期后状态未变化，可能续期未生效（可续期日期: {new_date}）")
@@ -1151,6 +1173,21 @@ def process_account(account_config: AccountConfig, global_config: GlobalConfig) 
 
 def main():
     """主函数"""
+    # ================= ⚡ 新增：智能日期拦截门禁 ⚡ =================
+    CACHE_FILE = "next_renew_date.txt"
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                next_renew_date = f.read().strip()
+            # 如果今天还没到允许续期的日子，直接终止脚本，不触发任何登录和网络请求
+            if next_renew_date and today_str < next_renew_date:
+                logger.info(f"🛑 智能拦截：当前日期 {today_str} 还没到官方开放续期日 {next_renew_date}。拒绝登录，安全闪退！")
+                os._exit(0)
+        except Exception as e:
+            logger.warning(f"读取日期缓存失败（将继续执行）: {e}")
+    # =============================================================
     logger.info("=" * 60)
     logger.info("EUserv 多账号自动续期脚本（多线程版本）")
     logger.info(f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
