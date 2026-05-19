@@ -806,8 +806,6 @@ class EUserv:
         """获取服务器列表"""
         logger.info(f"正在获取账号 {self.config.email} 的服务器列表...")
         
-            return servers
-        
         if not self.sess_id:
             logger.error("❌ 未登录")
             return {}
