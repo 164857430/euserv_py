@@ -989,14 +989,17 @@ class EUserv:
                 # 续期成功特征：服务器不再处于"可续期"状态
                 if not can_renew_after:
                     logger.info(f"✅ 服务器 {order_id} 续期验证通过（新可续期日期: {new_date}）")
-                    # ================= ⚡ 新增：续期成功后，把下个月的新日子写进去 ⚡ =================
+                    
+                    # ================= ⚡ 续期成功后更新账号专属文件 ⚡ =================
+                    safe_name = re.sub(r'[^\w@.-]', '_', self.config.email)
+                    cache_file = f"next_renew_date_{safe_name}.txt"
                     try:
-                        with open("next_renew_date.txt", "w", encoding="utf-8") as f:
+                        with open(cache_file, "w", encoding="utf-8") as f:
                             f.write(new_date)
-                        logger.info(f"💾 续期成功！已更新下个月开放续期日期 {new_date} 到缓存文件")
+                        logger.info(f"💾 账号 {self.config.email} 已更新下期日期: {new_date}")
                     except Exception as e:
-                        logger.warning(f"续期成功后写入新日期缓存失败: {e}")
-                    # =============================================================================
+                        logger.warning(f"更新缓存失败: {e}")
+                    # ===================================================================
                     return True
                 else:
                     logger.warning(f"⚠️ 服务器 {order_id} 续期后状态未变化，可能续期未生效（可续期日期: {new_date}）")
