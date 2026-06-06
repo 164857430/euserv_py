@@ -1171,21 +1171,38 @@ def process_account(account_config: AccountConfig, global_config: GlobalConfig) 
 
 def main():
     """主函数"""
-    # ================= ⚡ 新增：智能日期拦截门禁 ⚡ =================
-    CACHE_FILE = "next_renew_date.txt"
+    # ================= ⚡ 在这里加：多账号独立智能拦截门禁 ⚡ =================
     today_str = datetime.now().strftime('%Y-%m-%d')
+    all_blocked = True  # 默认假设所有账号都被拦截
     
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-                next_renew_date = f.read().strip()
-            # 如果今天还没到允许续期的日子，直接终止脚本，不触发任何登录和网络请求
-            if next_renew_date and today_str < next_renew_date:
-                logger.info(f"🛑 智能拦截：当前日期 {today_str} 还没到官方开放续期日 {next_renew_date}。拒绝登录，安全闪退！")
-                os._exit(0)
-        except Exception as e:
-            logger.warning(f"读取日期缓存失败（将继续执行）: {e}")
-    # =============================================================
+    # 循环检查每个账号
+    for account in ACCOUNTS:
+        safe_name = re.sub(r'[^\w@.-]', '_', account.email)
+        cache_file = f"next_renew_date_{safe_name}.txt"
+        
+        # 只要有一个账号没到期且有缓存，我们就检查缓存日期
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    next_renew_date = f.read().strip()
+                
+                # 判断：如果今天还没到这个账号允许续期的日子
+                if next_renew_date and today_str < next_renew_date:
+                    logger.info(f"🛑 账号 {account.email} 智能拦截：未到期 {next_renew_date}，跳过登录。")
+                    continue # 这个账号跳过，继续检查下一个账号
+                else:
+                    all_blocked = False # 这个账号日期已到，不能闪退
+            except Exception as e:
+                logger.warning(f"读取账号 {account.email} 缓存失败: {e}")
+                all_blocked = False
+        else:
+            all_blocked = False # 没有缓存文件（说明是新账号或刚过期），必须执行
+            
+    # 如果所有账号都被拦截了，那就直接退出
+    if all_blocked:
+        logger.info(f"🛑 所有账号均处于拦截期，全部安全闪退！")
+        os._exit(0)
+    # =======================================================================
     logger.info("=" * 60)
     logger.info("EUserv 多账号自动续期脚本（多线程版本）")
     logger.info(f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
