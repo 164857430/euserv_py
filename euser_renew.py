@@ -821,7 +821,7 @@ class EUserv:
             # ========================================================
             servers = {}
 
-            # 修复1: 动态匹配所有 Tab，不硬编码 ID
+            # 动态匹配所有 Tab
             all_tabs = soup.select('[id^="kc2_order_customer_orders_tab_content_"]')
             
             for tab in all_tabs:
@@ -830,7 +830,7 @@ class EUserv:
                     if len(server_id_cells) != 1:
                         continue
                     
-                    # 修复2: 取所有 td-z1-sp2-kc，用索引 [2] 拿 Actions 列
+                    # 取所有 td-z1-sp2-kc，用索引 [2] 拿 Actions 列
                     action_cells = tr.select('.td-z1-sp2-kc')
                     if len(action_cells) < 3:
                         continue
@@ -848,7 +848,6 @@ class EUserv:
                             can_renew_date = date_match.group(1)
                             can_renew = datetime.today().date() >= datetime.strptime(can_renew_date, "%Y-%m-%d").date()
                         else:
-                            # 有提示但没解析出日期，保守处理为不可续期
                             can_renew = False
 
                     server_id_text = server_id_cells[0].get_text(strip=True)
@@ -856,15 +855,18 @@ class EUserv:
             
             logger.info(f"✅ 账号 {self.config.email} 找到 {len(servers)} 台服务器")
             
-            # ================= ⚡ 新增：平时未到期时，记录下一次续期日子 ⚡ =================
+            # ================= ⚡ 核心修复：根据当前邮箱动态创建独立时间戳文件 ⚡ =================
+            safe_name = re.sub(r'[^\w@.-]', '_', self.config.email)
+            cache_file = f"next_renew_date_{safe_name}.txt"
+            
             for order_id, (can_renew, can_renew_date) in servers.items():
                 if can_renew_date and not can_renew:  # 只有在当前“不需要续期”时才记录
                     try:
-                        with open("next_renew_date.txt", "w", encoding="utf-8") as f:
+                        with open(cache_file, "w", encoding="utf-8") as f:
                             f.write(can_renew_date)
-                        logger.info(f"💾 已将下次开放续期日期 {can_renew_date} 写入缓存文件")
+                        logger.info(f"💾 账号 {self.config.email} 已成功写入专属缓存文件: {cache_file} -> {can_renew_date}")
                     except Exception as e:
-                        logger.warning(f"写入日期缓存失败: {e}")
+                        logger.warning(f"写入账号 {self.config.email} 日期缓存失败: {e}")
             # ============================================================================
             
             return servers
